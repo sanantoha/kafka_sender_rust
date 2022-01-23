@@ -1,0 +1,6 @@
+bootstrap: "localhost:9092"
+topic_name: "topic.name"
+is_ssl: false
+ca_cert_location: "certs/ca.pem"
+service_key_location: "certs/service.cert"
+key_cert_location: "certs/service.key"
