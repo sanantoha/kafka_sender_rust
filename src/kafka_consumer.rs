@@ -1,12 +1,13 @@
 use rdkafka::{
     consumer::{BaseConsumer, Consumer},
     ClientConfig, 
-    Message
+    Message, message::{Headers, BorrowedHeaders}
 };
     
 use rdkafka::config::RDKafkaLogLevel;
 
 use rand::Rng;
+use colored::Colorize;
 use std::str;
 
 use std::{thread, time::Duration};
@@ -74,8 +75,10 @@ pub fn start_consuming(bootstrap_server: &str,
             let res = msge.map(|msg| {
                 let key = msg.key().map(bytes_to_string).unwrap_or(Ok(EMPTY.to_string()));
                 let val = msg.payload().map(bytes_to_string).unwrap_or(Ok(EMPTY.to_string()));
+                let header = msg.headers().map(read_headers).unwrap_or(Ok(EMPTY.to_string()));
                 Msg {
                     key: key,
+                    header: Some(header),
                     value: val
                 }
             });
@@ -85,21 +88,44 @@ pub fn start_consuming(bootstrap_server: &str,
                 .map_err(|e| format!("key error {}", e))
                 .unwrap_or("".to_string());
 
+            let header = res.clone().and_then(|msg| msg.header.unwrap_or(Ok("".to_string())))
+                .map_err(|e| format!("header error {}", e))
+                .unwrap_or("".to_string());
+
             let val = res.and_then(|msg| msg.value)
-                .map_err(|e| format!("key error {}", e))
+                .map_err(|e| format!("value error {}", e))
                 .unwrap_or("".to_string());
 
             println!(
-                "key: {}, value: {}", key, val
+                "{} {}\n{} {}{} {}\n", "key:".bold().bright_green(), key.blink().blue(),
+                            "headers:".bold().bright_green(), header.yellow(), 
+                            "value:".bold().bright_green(), val.green()
             )
         }
         println!("end consumer thread");
     });    
     
     thread::sleep(Duration::MAX);
-    // thread::sleep(Duration::from_secs(10));
 }
 
 fn bytes_to_string(arr: &[u8]) -> Result<String, AppError> {
     str::from_utf8(arr).map(String::from).map_err(|e| AppError::EncodingError(format!("enc error: {}", e)))
+}
+
+fn read_headers(hm: &BorrowedHeaders) -> Result<String, AppError> {
+    let cnt = hm.count();
+    let mut idx = 0;
+
+    let mut res = String::new();
+
+    while idx < cnt {
+        if let Some(header_str) = hm.get(idx)
+            .map(|(k, v)| format!("{}={}\n", k, bytes_to_string(v).unwrap_or(EMPTY.to_string()))) {
+                res.push_str(&header_str);
+        }                            
+
+        idx += 1;
+    }
+
+    Ok(res)
 }

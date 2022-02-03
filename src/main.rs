@@ -86,6 +86,7 @@ fn read_messages_file(file_path_messages: &str) -> Result<Vec<Msg>, AppError> {
 
         vec.push(Msg {
             key: Ok(record.key),
+            header: None,
             value: Ok(record.value)
         });
     }

@@ -71,6 +71,7 @@ pub enum AppError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Msg {
     pub key: Result<String, AppError>,
+    pub header: Option<Result<String, AppError>>,
     pub value: Result<String, AppError>
 }
 
