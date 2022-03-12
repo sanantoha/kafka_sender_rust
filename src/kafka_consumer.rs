@@ -97,7 +97,7 @@ pub fn start_consuming(bootstrap_server: &str,
                 .unwrap_or("".to_string());
 
             println!(
-                "{} {}\n{} {}{} {}\n", "key:".bold().bright_green(), key.blink().blue(),
+                "{} {}\n{} {}\n{} {}\n", "key:".bold().bright_green(), key.blink().blue(),
                             "headers:".bold().bright_green(), header.yellow(), 
                             "value:".bold().bright_green(), val.green()
             )

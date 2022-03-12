@@ -31,7 +31,10 @@ pub struct Args {
     pub producer: bool,
 
     #[clap(short, long)]
-    pub file_path_messages: Option<String>
+    pub file_path_messages: Option<String>,
+
+    #[clap(long)]
+    pub csv_msg_file: bool
 }
 
 
@@ -65,7 +68,9 @@ pub enum AppError {
     EncodingError(String),
     KafkaError(String),
     ConfigError(String),
-    CsvReadError(String)
+    CsvReadError(String),
+    MsgFileReadError(String),
+    MsgReadError(String)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,7 +87,9 @@ impl fmt::Display for AppError {
             AppError::EncodingError(s) => s,
             AppError::KafkaError(s) => s,
             AppError::ConfigError(s) => s,
-            AppError::CsvReadError(s) => s
+            AppError::CsvReadError(s) => s,
+            AppError::MsgFileReadError(s) => s,
+            AppError::MsgReadError(s) => s
         };
 
 
