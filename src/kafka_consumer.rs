@@ -68,8 +68,15 @@ pub fn start_consuming(bootstrap_server: &str,
     thread::spawn(move || loop {
         println!("start consumer thread {:?}", thread::current().id());
 
-        for msg_result in consumer.iter() {
-            let msge = msg_result
+        // for msg_result in consumer.iter() {
+        loop {
+            let msg_result = consumer.poll(Duration::from_secs(15));
+            if msg_result.is_none() {
+                println!("there is no any messages, next check in 15 sec");
+                continue;
+            }
+
+            let msge = msg_result.unwrap()
                     .map_err(|e| AppError::KafkaError(format!("kafka value error{}", e)));
 
             let res = msge.map(|msg| {
@@ -102,7 +109,7 @@ pub fn start_consuming(bootstrap_server: &str,
                             "value:".bold().bright_green(), val.green()
             )
         }
-        println!("end consumer thread");
+        // println!("end consumer thread");
     });    
     
     thread::sleep(Duration::MAX);
