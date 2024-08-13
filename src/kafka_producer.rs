@@ -6,30 +6,31 @@ use crate::types::Msg;
 use rdkafka::config::RDKafkaLogLevel;
 use std::thread;
 use std::time::Duration;
+use log::{error, info};
 
 const EMPTY_MSG: &str = "";
 
 pub fn start_producing(bootstrap_server: &str, 
                        topic_name: &str,
-                       is_ssl: &bool,
+                       is_ssl: bool,
                        ca_cert_location: &str,
                        service_key_location: &str,
                        key_cert_location: &str,
                        msgs: &Vec<Msg>
                     ) {
     
-    println!("bootstrap: {}", bootstrap_server);
-    println!("topic name: {}", topic_name);
-    println!("ssl: {}", is_ssl);    
+    info!("bootstrap: {}", bootstrap_server);
+    info!("topic name: {}", topic_name);
+    info!("ssl: {}", is_ssl);
 
 
     let mut config: ClientConfig = ClientConfig::new();
         
 
-    if *is_ssl {
-        println!("ssl.ca.location: {}", ca_cert_location);
-        println!("ssl.certificate.location: {}", service_key_location);
-        println!("ssl.key.location: {}", key_cert_location);
+    if is_ssl {
+        info!("ssl.ca.location: {}", ca_cert_location);
+        info!("ssl.certificate.location: {}", service_key_location);
+        info!("ssl.key.location: {}", key_cert_location);
 
         config.set("security.protocol", "SSL")
             .set("ssl.ca.location", ca_cert_location)
@@ -50,14 +51,14 @@ pub fn start_producing(bootstrap_server: &str,
         msg_base_record = match &msg.key {
             Ok(k) => msg_base_record.key(k),
             Err(e) => {
-                println!("key not found {}", e);
+                error!("key not found {}", e);
                 msg_base_record
             }                
         };
         msg_base_record = match &msg.value {
             Ok(v) => msg_base_record.payload(v),
             Err(e) => {
-                println!("value not found {}", e);
+                error!("value not found {}", e);
                 msg_base_record.payload(&empty_msg_val)
             }                
         };
@@ -66,7 +67,7 @@ pub fn start_producing(bootstrap_server: &str,
             .send(msg_base_record)
             .expect("failed to send message");
             
-        println!("message sent {:?}", msg);        
+        info!("message sent {:?}", msg);
     }
         
     thread::sleep(Duration::from_secs(3));

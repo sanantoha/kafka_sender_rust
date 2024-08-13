@@ -1,0 +1,8 @@
+run:
+cargo build --release
+
+go to directory: cd target/release
+
+./kafka_sender_rust -c -i true --ca-cert-location ../../certs/ca.pem --service-key-location ../../certs/service.cert --key-cert-location ../../certs/service.key -b kafka-muhammad-45e0.aivencloud.com:17307 -t rc.alef.iam.auth
+
+cp config_template.yml /Users/a.sakharov/Library/Application\ Support/rs.kafka_sender_rust/default-config.yml

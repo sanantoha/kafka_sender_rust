@@ -11,37 +11,39 @@ use colored::Colorize;
 use std::str;
 
 use std::{thread, time::Duration};
+use error_stack::{Report, ResultExt};
 
 use crate::types::{AppError, Msg};
+use log::{info, warn};
 
 const EMPTY: &str = "<empty>";
 
 
 pub fn start_consuming(bootstrap_server: &str, 
                        topic_name: &str,
-                       is_ssl: &bool,
+                       is_ssl: bool,
                        ca_cert_location: &str,
                        service_key_location: &str,
                        key_cert_location: &str
                     ) {
                         
-    println!("bootstrap: {}", bootstrap_server);
-    println!("topic name: {}", topic_name);
-    println!("ssl: {}", is_ssl);    
+    info!("bootstrap: {}", bootstrap_server);
+    info!("topic name: {}", topic_name);
+    info!("ssl: {}", is_ssl);
 
 
     let mut rng = rand::thread_rng();
     let group_id: String = format!("my_consumer_group_{}", rng.gen::<u64>());
-    println!("group_id: {}", group_id);
+    info!("group_id: {}", group_id);
 
 
     let mut config: ClientConfig = ClientConfig::new();
         
 
-    if *is_ssl {
-        println!("ssl.ca.location: {}", ca_cert_location);
-        println!("ssl.certificate.location: {}", service_key_location);
-        println!("ssl.key.location: {}", key_cert_location);
+    if is_ssl {
+        info!("ssl.ca.location: {}", ca_cert_location);
+        info!("ssl.certificate.location: {}", service_key_location);
+        info!("ssl.key.location: {}", key_cert_location);
 
         config.set("security.protocol", "SSL")
             .set("ssl.ca.location", ca_cert_location)
@@ -66,18 +68,16 @@ pub fn start_consuming(bootstrap_server: &str,
 
 
     thread::spawn(move || loop {
-        println!("start consumer thread {:?}", thread::current().id());
+        info!("start consumer thread {:?}", thread::current().id());
 
-        // for msg_result in consumer.iter() {
         loop {
             let msg_result = consumer.poll(Duration::from_secs(15));
             if msg_result.is_none() {
-                println!("there is no any messages, next check in 15 sec");
+                warn!("there is no any messages, next check in 15 sec");
                 continue;
             }
 
-            let msge = msg_result.unwrap()
-                    .map_err(|e| AppError::KafkaError(format!("kafka value error{}", e)));
+            let msge = msg_result.unwrap().change_context(AppError::KafkaError { msg: "can not read message from kafka" });
 
             let res = msge.map(|msg| {
                 let key = msg.key().map(bytes_to_string).unwrap_or(Ok(EMPTY.to_string()));
@@ -90,46 +90,47 @@ pub fn start_consuming(bootstrap_server: &str,
                 }
             });
 
-            
-            let key = res.clone().and_then(|msg| msg.key)
-                .map_err(|e| format!("key error {}", e))
-                .unwrap_or("".to_string());
 
-            let header = res.clone().and_then(|msg| msg.header.unwrap_or(Ok("".to_string())))
-                .map_err(|e| format!("header error {}", e))
-                .unwrap_or("".to_string());
+            if let Ok(ref msg) = res {
+                let empty = String::from("");
+                let empty_result = Ok(empty.clone());
 
-            let val = res.and_then(|msg| msg.value)
-                .map_err(|e| format!("value error {}", e))
-                .unwrap_or("".to_string());
+                let key = msg.key.as_ref().unwrap_or(&empty);
+                let header = msg.header.as_ref().unwrap_or(&empty_result).as_ref().unwrap_or(&empty);
+                let val = msg.value.as_ref().unwrap_or(&empty);
 
-            println!(
-                "{} {}\n{} {}\n{} {}\n", "key:".bold().bright_green(), key.blink().blue(),
-                            "headers:".bold().bright_green(), header.yellow(), 
-                            "value:".bold().bright_green(), val.green()
-            )
+                println!(
+                    "{} {}\n{} {}\n{} {}\n", "key:".bold().bright_green(), key.blink().blue(),
+                    "headers:".bold().bright_green(), header.yellow(),
+                    "value:".bold().bright_green(), val.green()
+                )
+            }
+
         }
-        // println!("end consumer thread");
     });    
     
     thread::sleep(Duration::MAX);
 }
 
-fn bytes_to_string(arr: &[u8]) -> Result<String, AppError> {
-    str::from_utf8(arr).map(String::from).map_err(|e| AppError::EncodingError(format!("enc error: {}", e)))
+fn bytes_to_string(arr: &[u8]) -> Result<String, Report<AppError>> {
+    return str::from_utf8(arr).map(String::from)
+        .change_context(AppError::EncodingError { msg: "can not encode value" });
 }
 
-fn read_headers(hm: &BorrowedHeaders) -> Result<String, AppError> {
+fn read_headers(hm: &BorrowedHeaders) -> Result<String, Report<AppError>> {
     let cnt = hm.count();
     let mut idx = 0;
 
     let mut res = String::new();
 
     while idx < cnt {
-        if let Some(header_str) = hm.get(idx)
-            .map(|(k, v)| format!("{}={}\n", k, bytes_to_string(v).unwrap_or(EMPTY.to_string()))) {
-                res.push_str(&header_str);
-        }                            
+        let header = hm.get(idx);
+        let key = header.key;
+        if let Some(v) = header.value {
+            let val = bytes_to_string(v)?;
+            let vstr = format!("{}={}\n", key, val);
+            res.push_str(&vstr)
+        }
 
         idx += 1;
     }

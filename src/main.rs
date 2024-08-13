@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::{path::Path, fs::File, io::BufReader, io::BufRead};
+use colored::Colorize;
 
 mod kafka_consumer;
 mod kafka_producer;
@@ -8,24 +9,27 @@ mod types;
 use types::{Args, Config, AppError, Msg, CsvRecord};
 extern crate confy;
 
-
+use log::warn;
+use env_logger;
+use error_stack::{Report, ResultExt};
 
 
 // default path /Users/san/Library/Application\ Support/rs.kafka_sender_rust/default-config.yml
-fn main() -> Result<(), AppError> {
+fn main() -> Result<(), Report<AppError>> {
+    env_logger::init();
+
     let args = Args::parse();
 
     if args.consumer && args.producer {
-        return Err(AppError::ConfigError("error you can not use consumer and producer at the same time".to_string()));
+        return Err(Report::new(AppError::ConfigError {msg: "error you can not use consumer and producer at the same time" }));
     }
     
 
-    let cfg: Config = confy::load("kafka_sender_rust", None)
-            .map_err(|e| AppError::ConfigError(e.to_string()))?;
+    let cfg: Config = confy::load("kafka_sender_rust", None).change_context(AppError::ConfigError {msg: "can not read config file"})?;
 
     let bootstrap = &args.bootstrap.unwrap_or(cfg.bootstrap);
     let topic_name =  &args.topic_name.unwrap_or(cfg.topic_name);
-    let is_ssl = &args.is_ssl.unwrap_or(cfg.is_ssl);
+    let is_ssl = args.is_ssl.unwrap_or(cfg.is_ssl);
     let ca_cert_location = &args.ca_cert_location.unwrap_or(cfg.ca_cert_location);
     let service_key_location = &args.service_key_location.unwrap_or(cfg.service_key_location);
     let key_cert_location = &args.key_cert_location.unwrap_or(cfg.key_cert_location);
@@ -40,26 +44,24 @@ fn main() -> Result<(), AppError> {
             key_cert_location       
         );
     } else if args.producer {
-        let file_path_messages_str = args.file_path_messages.clone().unwrap_or("".to_string());
-
-        let msgs_res = 
-            args.file_path_messages
-                .map(|x| {
+        let msgs =
+            args.file_path_messages.ok_or(Report::new(AppError::ConfigError { msg: "file is not specified, use -h to get help" }))
+                .and_then(|x| {
                     if args.csv_msg_file {
                         read_messages_csv_file(&x)
                     } else {
                         read_messages_file(&x)
                     }                    
-                })
-                .unwrap_or(Ok(vec![]));
+                })?;
+                // .unwrap_or(Ok(vec![]));
 
-        let msgs = match msgs_res {
-            Ok(vec) => vec,
-            Err(e) => {
-                eprintln!("error reading csv file {} {}", file_path_messages_str, e);
-                vec![]
-            }
-        };
+        // let msgs = match msgs_res {
+        //     Ok(vec) => vec,
+        //     Err(e) => {
+        //         error!("error reading csv file {} {}", file_path_messages_str, e);
+        //         vec![]
+        //     }
+        // };
 
         kafka_producer::start_producing(
             bootstrap, 
@@ -71,26 +73,26 @@ fn main() -> Result<(), AppError> {
             &msgs
         );
     } else {
-        println!("please use `--consumer` or `--producer` argument");
+        warn!("please use `--consumer` or `--producer` argument");
     }
     
         
     Ok(())
 }
 
-fn read_messages_csv_file(file_path_messages: &str) -> Result<Vec<Msg>, AppError> {
+fn read_messages_csv_file(file_path_messages: &str) -> Result<Vec<Msg>, Report<AppError>> {
     let path = Path::new(file_path_messages);
 
     let mut rdr = csv::ReaderBuilder::new()
         .escape(Some(b'\\'))
         .from_path(path)
-        .map_err(csv_msg_err)?;        
+        .change_context(AppError::CsvReadError)?;
         
 
     let mut vec: Vec<Msg> = Vec::new();
 
     for result in rdr.deserialize() {
-        let record: CsvRecord = result.map_err(csv_msg_err)?;
+        let record: CsvRecord = result.change_context(AppError::CsvReadError)?;
 
         vec.push(Msg {
             key: Ok(record.key),
@@ -102,31 +104,18 @@ fn read_messages_csv_file(file_path_messages: &str) -> Result<Vec<Msg>, AppError
     Ok(vec)
 }
 
-fn csv_msg_err(e: csv::Error) -> AppError {
-    AppError::CsvReadError(format!("{}", e))
-}
-
-fn read_messages_file(file_path: &str) -> Result<Vec<Msg>, AppError> {
+fn read_messages_file(file_path: &str) -> Result<Vec<Msg>, Report<AppError>> {
     let path = Path::new(file_path);
 
-    let file = File::open(path)
-        .map_err(msg_file_read_error)?;
+    let file = File::open(path).change_context(AppError::MsgFileReadError {path: file_path.to_string().red() })?;
 
     let msgs = BufReader::new(file).lines().map(|line|{
         Msg {
             key: Ok("".to_string()),
             header: None,
-            value: line.map_err(msg_read_error)
+            value: line.change_context(AppError::MsgReadError)
         }
     }).collect();
 
     Ok(msgs)
-}
-
-fn msg_file_read_error(e: std::io::Error) -> AppError {
-    AppError::MsgFileReadError(format!("{}", e))
-}
-
-fn msg_read_error(e: std::io::Error) -> AppError {
-    AppError::MsgReadError(format!("{}", e))
 }

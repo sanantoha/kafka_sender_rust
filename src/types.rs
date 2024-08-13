@@ -1,6 +1,8 @@
 use clap::Parser;
+use colored::ColoredString;
 use serde::{Serialize, Deserialize};
-use std::fmt;
+use error_stack::Report;
+use thiserror::Error;
 
 
 #[derive(Parser, Debug)]
@@ -63,39 +65,55 @@ impl Default for Config {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum AppError {
+//     EncodingError(String),
+//     KafkaError(String),
+//     ConfigError(String),
+//     CsvReadError(String),
+//     MsgFileReadError(String),
+//     MsgReadError(String)
+// }
+
+#[derive(Error, Debug)]
 pub enum AppError {
-    EncodingError(String),
-    KafkaError(String),
-    ConfigError(String),
-    CsvReadError(String),
-    MsgFileReadError(String),
-    MsgReadError(String)
+    #[error("encoding error: {msg}")]
+    EncodingError { msg: &'static str },
+    #[error("kafka error: {msg}")]
+    KafkaError {msg: &'static str },
+    #[error("config error: {msg}")]
+    ConfigError {msg: &'static str },
+    #[error("csv read error")]
+    CsvReadError,
+    #[error("error read message file: {path}")]
+    MsgFileReadError {path: ColoredString },
+    #[error("error read message")]
+    MsgReadError,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Msg {
-    pub key: Result<String, AppError>,
-    pub header: Option<Result<String, AppError>>,
-    pub value: Result<String, AppError>
+    pub key: Result<String, Report<AppError>>,
+    pub header: Option<Result<String, Report<AppError>>>,
+    pub value: Result<String, Report<AppError>>
 }
 
 
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let str = match &*self {
-            AppError::EncodingError(s) => s,
-            AppError::KafkaError(s) => s,
-            AppError::ConfigError(s) => s,
-            AppError::CsvReadError(s) => s,
-            AppError::MsgFileReadError(s) => s,
-            AppError::MsgReadError(s) => s
-        };
-
-
-        write!(f, "{}", str)
-    }
-}
+// impl fmt::Display for AppError {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         let str = match &*self {
+//             AppError::EncodingError(s) => s,
+//             AppError::KafkaError(s) => s,
+//             AppError::ConfigError(s) => s,
+//             AppError::CsvReadError(s) => s,
+//             AppError::MsgFileReadError(s) => s,
+//             AppError::MsgReadError(s) => s
+//         };
+//
+//
+//         write!(f, "{}", str)
+//     }
+// }
 
 #[derive(Debug, Deserialize)]
 pub struct CsvRecord {
