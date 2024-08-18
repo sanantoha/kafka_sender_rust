@@ -67,7 +67,7 @@ pub fn start_consuming(bootstrap_server: &str,
         .expect("topic subscribe failed");
 
 
-    thread::spawn(move || loop {
+    thread::spawn(move || {
         info!("start consumer thread {:?}", thread::current().id());
 
         loop {
@@ -84,7 +84,7 @@ pub fn start_consuming(bootstrap_server: &str,
                 let val = msg.payload().map(bytes_to_string).unwrap_or(Ok(EMPTY.to_string()));
                 let header = msg.headers().map(read_headers).unwrap_or(Ok(EMPTY.to_string()));
                 Msg {
-                    key: key,
+                    key,
                     header: Some(header),
                     value: val
                 }
